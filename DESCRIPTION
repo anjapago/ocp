@@ -1,7 +1,7 @@
 Package: ocp
 Type: Package
 Title: Bayesian Online Changepoint Detection
-Version: 0.1.0
+Version: 0.1.1
 Author: Andrea Pagotto
 Maintainer: Andrea Pagotto <ajpagotto@gmail.com>
 Description: Implements the Bayesian online changepoint
