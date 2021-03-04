@@ -103,9 +103,14 @@ function(datapts, oCPD=NULL,missPts = "none",
          truncRlim =.Machine$double.xmin, minRlength= 1, maxRlength= 10^4,
          minsep=1, maxsep=10^4,
          timing = FALSE, getR = FALSE, optionalOutputs = FALSE, printupdates=FALSE) {
-  algo_start_time<- Sys.time() # start timing
+  # See: https://stackoverflow.com/a/17244041/2148718
+  ocpd_settings <- as.list(environment())
 
-  ocpd_settings<- as.list(match.call())
+  # We don't care about these two parameters as they aren't "settings"
+  ocpd_settings$datapts <- NULL
+  ocpd_settings$oCPD <- NULL
+
+  algo_start_time<- Sys.time() # start timing
 
   if(is.null(ocpd_settings$probModel)) ocpd_settings$probModel<- probModel
   if(is.null(ocpd_settings$init_params)) ocpd_settings$init_params<- init_params
@@ -116,7 +121,7 @@ function(datapts, oCPD=NULL,missPts = "none",
   # if loading an existing ocpd object, check for compatible settings
   if(!is.null(oCPD)){
     if(!(class(oCPD)=="ocp")) stop("Argument oCPD must be of type \"ocp\"")
-    if(!identical(as.character(oCPD$ocpd_settings[c(-1, -2)]), as.character(ocpd_settings[c(-1, -2)])))
+    if(!is.null(oCPD$ocpd_settings) && !identical(as.character(oCPD$ocpd_settings), as.character(ocpd_settings)))
       stop(print("Incompatible ocpd settings with input ocpd object."),
            for(set_id in 1:length(ocpd_settings)){ # starting from "misspts"
              if(as.character(ocpd_settings[[set_id]])!= as.character(oCPD$ocpd_settings[[set_id]])){
@@ -603,8 +608,29 @@ findCPprobs<-function(currrunprobs, probmaxes, logprobcpstrunc,
 #' @examples
 #' empty_ocpd<- initOCPD(1) # initialize bject with 1 dimensions
 ##############################################################
-initOCPD<-function(dims, init_params=list(list(m=0, k=0.01, a=0.01, b=0.0001)),
-                   initProb = c(gaussian_init)){
+initOCPD<-function(dims, init_params, init_prob){
+
+  if (!hasArg(init_params)){
+    if (hasArg(init_prob)){
+      stop('You must provide initial parameters if using a custom distribution')
+    }
+    # If init params are missing, but we are using gaussian, set defaults
+    init_params = replicate(dims, list(list(m=0, k=0.01, a=0.01, b=0.0001)))
+  }
+  else if (length(init_params) == 1){
+    # If we provided custom parameters as a scalar, repeat it for convenience
+    init_params = replicate(dims, init_params)
+  }
+
+  if (!hasArg(init_prob)){
+    # If the distribution is missing, assume gaussian
+    init_prob = replicate(dims, c(gaussian_init))
+  }
+  else if (length(init_prob) == 1){
+    # If we provided a custom distribution as a scalar, repeat it for convenience
+    init_prob = replicate(dims, init_prob)
+  }
+
 
   # initialize R (probs matrix), maxes and cps vectors
   R  <- matrix(1) # matrix of 0, size of length of ts
@@ -613,7 +639,7 @@ initOCPD<-function(dims, init_params=list(list(m=0, k=0.01, a=0.01, b=0.0001)),
   cps    <- vector(mode="integer",length = 0)
   data <- matrix(nrow=0,ncol=dims)
 
-  # init variables for postprob function
+    # init variables for postprob function
   logprobs<- c(log(R[1,1]))
   currprobs<- list(1) # not used in calculations, just for checking output
 
@@ -626,8 +652,9 @@ initOCPD<-function(dims, init_params=list(list(m=0, k=0.01, a=0.01, b=0.0001)),
   # initialize update params
   #update_params0<- update_paramsT<- initProb(init_params, dims)
   update_params0<- update_paramsT<- list()
+
   for(dimi in 1:dims){
-    update_params0[[dimi]]<- update_paramsT[[dimi]]<- initProb[[dimi]](init_params[[dimi]], 1)
+    update_params0[[dimi]]<- update_paramsT[[dimi]]<- init_prob[[dimi]](init_params[[dimi]], 1)
   }
 
   changepoint_lists<- list(colmaxes=list(cps), threshcps= list(cps),
